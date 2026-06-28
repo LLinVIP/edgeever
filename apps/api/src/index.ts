@@ -63,6 +63,8 @@ type NotebookRow = {
   icon: string | null;
   color: string | null;
   sort_order: number;
+  memo_count: number | null;
+  last_memo_updated_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -432,10 +434,11 @@ app.get("/api/v1/notebooks", async (c) => {
   }
 
   const rows = await c.env.DB.prepare(
-    `SELECT id, parent_id, name, slug, icon, color, sort_order, created_at, updated_at
-     FROM notebooks
-     WHERE is_deleted = 0
-     ORDER BY parent_id IS NOT NULL, sort_order ASC, name ASC`
+    notebookSelectSql(
+      `WHERE n.is_deleted = 0
+       GROUP BY n.id, n.parent_id, n.name, n.slug, n.icon, n.color, n.sort_order, n.created_at, n.updated_at
+       ORDER BY n.parent_id IS NOT NULL, n.sort_order ASC, n.name ASC`
+    )
   ).all<NotebookRow>();
 
   return c.json({ notebooks: rows.results.map(mapNotebook) });
@@ -2130,9 +2133,28 @@ const mapNotebook = (row: NotebookRow): Notebook => ({
   icon: row.icon,
   color: row.color,
   sortOrder: row.sort_order,
+  memoCount: row.memo_count ?? 0,
+  lastMemoUpdatedAt: row.last_memo_updated_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+const notebookSelectSql = (tail: string) => `
+  SELECT n.id,
+         n.parent_id,
+         n.name,
+         n.slug,
+         n.icon,
+         n.color,
+         n.sort_order,
+         COUNT(m.id) AS memo_count,
+         MAX(m.updated_at) AS last_memo_updated_at,
+         n.created_at,
+         n.updated_at
+  FROM notebooks n
+  LEFT JOIN memos m ON m.notebook_id = n.id AND m.is_deleted = 0
+  ${tail}
+`;
 
 const mapMemoSummary = (row: MemoSummaryRow): MemoSummary => ({
   id: row.id,
@@ -2231,10 +2253,11 @@ const getApiTokenRow = async (db: D1Database, id: string): Promise<ApiTokenRow |
 const listNotebooks = async (db: D1Database): Promise<Notebook[]> => {
   const rows = await db
     .prepare(
-      `SELECT id, parent_id, name, slug, icon, color, sort_order, created_at, updated_at
-       FROM notebooks
-       WHERE is_deleted = 0
-       ORDER BY parent_id IS NOT NULL, sort_order ASC, name ASC`
+      notebookSelectSql(
+        `WHERE n.is_deleted = 0
+         GROUP BY n.id, n.parent_id, n.name, n.slug, n.icon, n.color, n.sort_order, n.created_at, n.updated_at
+         ORDER BY n.parent_id IS NOT NULL, n.sort_order ASC, n.name ASC`
+      )
     )
     .all<NotebookRow>();
 
@@ -2411,9 +2434,10 @@ const searchMemoSummaries = async (
 const getNotebook = async (db: D1Database, id: string): Promise<Notebook | null> => {
   const row = await db
     .prepare(
-      `SELECT id, parent_id, name, slug, icon, color, sort_order, created_at, updated_at
-       FROM notebooks
-       WHERE id = ? AND is_deleted = 0`
+      notebookSelectSql(
+        `WHERE n.id = ? AND n.is_deleted = 0
+         GROUP BY n.id, n.parent_id, n.name, n.slug, n.icon, n.color, n.sort_order, n.created_at, n.updated_at`
+      )
     )
     .bind(id)
     .first<NotebookRow>();

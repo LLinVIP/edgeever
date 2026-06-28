@@ -701,7 +701,10 @@ export const WorkspaceApp = ({
     mutationFn: api.createMemo,
     onSuccess: async (data) => {
       setMemoView("notebook");
-      await queryClient.invalidateQueries({ queryKey: ["memos"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["memos"] }),
+        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+      ]);
       queryClient.setQueryData(["memo", data.memo.id], { memo: data.memo });
       setRightView("editor");
       setSelectedMemoId(data.memo.id);
@@ -713,7 +716,10 @@ export const WorkspaceApp = ({
     mutationFn: api.mergeMemos,
     onSuccess: async (data) => {
       clearMemoSelection();
-      await queryClient.invalidateQueries({ queryKey: ["memos"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["memos"] }),
+        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+      ]);
       queryClient.setQueryData(["memo", data.memo.id], { memo: data.memo });
       setRightView("editor");
       setSelectedMemoId(data.memo.id);
@@ -725,8 +731,11 @@ export const WorkspaceApp = ({
     mutationFn: api.moveMemos,
     onSuccess: async () => {
       clearMemoSelection();
-      await queryClient.invalidateQueries({ queryKey: ["memos"] });
-      await queryClient.invalidateQueries({ queryKey: ["memo"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["memos"] }),
+        queryClient.invalidateQueries({ queryKey: ["memo"] }),
+        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+      ]);
     },
   });
 
@@ -769,8 +778,11 @@ export const WorkspaceApp = ({
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["memos"] });
-      await queryClient.invalidateQueries({ queryKey: ["memo"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["memos"] }),
+        queryClient.invalidateQueries({ queryKey: ["memo"] }),
+        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+      ]);
     },
   });
 
@@ -788,6 +800,7 @@ export const WorkspaceApp = ({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["memos"] }),
         queryClient.invalidateQueries({ queryKey: ["memo"] }),
+        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
         queryClient.invalidateQueries({ queryKey: ["resources"] }),
       ]);
     },
@@ -801,7 +814,10 @@ export const WorkspaceApp = ({
         setSelectedMemoId(null);
         setActivePane("memos");
       }
-      await queryClient.invalidateQueries({ queryKey: ["memos"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["memos"] }),
+        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+      ]);
     },
   });
 
@@ -825,7 +841,10 @@ export const WorkspaceApp = ({
     mutationFn: api.restoreMemo,
     onSuccess: async (data) => {
       setMemoView("notebook");
-      await queryClient.invalidateQueries({ queryKey: ["memos"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["memos"] }),
+        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+      ]);
       queryClient.setQueryData(["memo", data.memo.id], { memo: data.memo });
       setSelectedNotebookId(data.memo.notebookId);
       setRightView("editor");
@@ -1563,7 +1582,6 @@ export const WorkspaceApp = ({
             <MemoListPane
               notebook={selectedNotebook}
               notebooks={notebooks}
-              user={user}
               view={memoView}
               memos={memos}
               selectedMemoId={selectedMemoId}
@@ -1579,8 +1597,6 @@ export const WorkspaceApp = ({
               isMoving={moveMemosMutation.isPending}
               isPinning={pinMemosMutation.isPending}
               isDeleting={deleteMemosMutation.isPending || deleteMemoMutation.isPending}
-              isOnline={isOnline}
-              isSyncingQueuedChanges={isSyncingQueuedChanges}
               multiSelectKeyDown={multiSelectKeyDown}
               onOpenNotebookPicker={() => setMobileNotebookPickerOpen(true)}
               onSearch={setSearch}
@@ -1627,7 +1643,6 @@ export const WorkspaceApp = ({
               onPinSelectedMemos={handlePinSelectedMemos}
               onDeleteSelectedMemos={handleDeleteSelectedMemos}
               onMoveSelectedMemos={handleMoveSelectedMemos}
-              onSyncQueuedChanges={() => void runQueuedSync()}
               mobileListActionsOpen={mobileListActionsOpen}
               setMobileListActionsOpen={setMobileListActionsOpen}
               mobileMoveOpen={mobileMoveOpen}
@@ -1696,7 +1711,10 @@ export const WorkspaceApp = ({
                     }}
                     onSaved={async (memo) => {
                       queryClient.setQueryData(["memo", memo.id], { memo });
-                      await queryClient.invalidateQueries({ queryKey: ["memos"] });
+                      await Promise.all([
+                        queryClient.invalidateQueries({ queryKey: ["memos"] }),
+                        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+                      ]);
                     }}
                     onDeleted={async (memoId) => {
                       deleteMemoMutation.mutate({ memoId, permanent: false });

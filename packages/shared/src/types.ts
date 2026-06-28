@@ -8,6 +8,8 @@ export type Notebook = {
   icon: string | null;
   color: string | null;
   sortOrder: number;
+  memoCount: number;
+  lastMemoUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

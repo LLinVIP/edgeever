@@ -1053,6 +1053,13 @@
           "sortOrder": {
             "type": "integer"
           },
+          "memoCount": {
+            "type": "integer"
+          },
+          "lastMemoUpdatedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -1062,7 +1069,7 @@
             "format": "date-time"
           }
         },
-        "required": ["id", "parentId", "name", "slug", "icon", "color", "sortOrder", "createdAt", "updatedAt"]
+        "required": ["id", "parentId", "name", "slug", "icon", "color", "sortOrder", "memoCount", "lastMemoUpdatedAt", "createdAt", "updatedAt"]
       },
       "NotebookCreateInput": {
         "type": "object",

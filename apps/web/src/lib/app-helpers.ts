@@ -1,6 +1,6 @@
 import type { MemoSummary, Notebook, TiptapDoc } from "@edgeever/shared";
 import { DEFAULT_MEMO_TITLE } from "@edgeever/shared";
-import { buildNotebookTree, type NotebookNode } from "./utils";
+import { buildNotebookTree, type NotebookNode, type NotebookNodeComparator } from "./utils";
 import * as React from "react";
 import type { ReactNode } from "react";
 
@@ -8,6 +8,7 @@ export type Pane = "notebooks" | "memos" | "editor";
 export type MemoView = "notebook" | "trash";
 export type MemoFilterMode = "all" | "tagged" | "untagged" | "pinned";
 export type MemoSortMode = "updated-desc" | "created-desc" | "title-asc";
+export type NotebookSortMode = "name-asc" | "memo-count-desc" | "updated-desc";
 export type MemoListDensity = "preview" | "compact";
 export type MobileBottomNavItem = "home" | "search" | "templates" | "settings";
 export type MemoContextMenuState = { memo: MemoSummary; x: number; y: number };
@@ -142,6 +143,7 @@ export { DEFAULT_MEMO_TITLE };
 export const IMAGE_COMPRESSION_STORAGE_KEY = "edgeever.imageCompressionEnabled";
 export const MEMO_LIST_DENSITY_STORAGE_KEY = "edgeever.memoListDensity";
 export const MEMO_LIST_WIDTH_STORAGE_KEY = "edgeever.memoListWidth";
+export const NOTEBOOK_SORT_STORAGE_KEY = "edgeever.notebookSort";
 export const DEFAULT_MEMO_LIST_WIDTH_PX = 360;
 export const MIN_MEMO_LIST_WIDTH_PX = 300;
 export const MAX_MEMO_LIST_WIDTH_PX = 540;
@@ -153,6 +155,12 @@ export const MEMO_SORT_OPTIONS: Array<{ value: MemoSortMode; label: string }> = 
   { value: "updated-desc", label: "最近更新" },
   { value: "created-desc", label: "创建时间" },
   { value: "title-asc", label: "标题 A-Z" },
+];
+
+export const NOTEBOOK_SORT_OPTIONS: Array<{ value: NotebookSortMode; label: string }> = [
+  { value: "name-asc", label: "名称" },
+  { value: "memo-count-desc", label: "笔记数量" },
+  { value: "updated-desc", label: "更新日期" },
 ];
 
 export const MEMO_FILTER_OPTIONS: Array<{ value: MemoFilterMode; label: string }> = [
@@ -233,6 +241,23 @@ export const writeMemoListWidthPreference = (width: number) => {
   }
 };
 
+export const readNotebookSortPreference = (): NotebookSortMode => {
+  try {
+    const sortMode = window.localStorage.getItem(NOTEBOOK_SORT_STORAGE_KEY);
+    return NOTEBOOK_SORT_OPTIONS.some((option) => option.value === sortMode) ? (sortMode as NotebookSortMode) : "name-asc";
+  } catch {
+    return "name-asc";
+  }
+};
+
+export const writeNotebookSortPreference = (sortMode: NotebookSortMode) => {
+  try {
+    window.localStorage.setItem(NOTEBOOK_SORT_STORAGE_KEY, sortMode);
+  } catch {
+    // Local storage can be unavailable in private or restricted browser contexts.
+  }
+};
+
 export const compareDateDesc = (first: string, second: string) => {
   const firstTime = Date.parse(first);
   const secondTime = Date.parse(second);
@@ -250,6 +275,26 @@ export const compareDateDesc = (first: string, second: string) => {
   }
 
   return secondTime - firstTime;
+};
+
+const compareNotebookNameAsc = (first: Notebook, second: Notebook) =>
+  first.name.localeCompare(second.name, "zh-CN", { numeric: true, sensitivity: "base" });
+
+const compareNotebookUpdatedDesc = (first: Notebook, second: Notebook) => {
+  const dateCompare = compareDateDesc(first.lastMemoUpdatedAt ?? first.updatedAt, second.lastMemoUpdatedAt ?? second.updatedAt);
+  return dateCompare !== 0 ? dateCompare : compareNotebookNameAsc(first, second);
+};
+
+export const getNotebookSortComparator = (sortMode: NotebookSortMode): NotebookNodeComparator => {
+  if (sortMode === "memo-count-desc") {
+    return (first, second) => second.memoCount - first.memoCount || compareNotebookNameAsc(first, second);
+  }
+
+  if (sortMode === "updated-desc") {
+    return compareNotebookUpdatedDesc;
+  }
+
+  return compareNotebookNameAsc;
 };
 
 export const sortMemos = (memos: MemoSummary[], sortMode: MemoSortMode, prioritizePinned = true) =>

@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -22,18 +22,24 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NotebookTreeItem } from "./NotebookTreeItem";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Notebook, AuthUser } from "@edgeever/shared";
-import type { NotebookNode, NotebookDropPosition } from "@/lib/app-helpers";
+import type { NotebookNode, NotebookDropPosition, NotebookSortMode } from "@/lib/app-helpers";
 import type { SyncQueueSummary } from "@/lib/sync-queue";
-import { buildNotebookTree, hasEdgeEverDragData } from "@/lib/app-helpers";
+import {
+  NOTEBOOK_SORT_OPTIONS,
+  buildNotebookTree,
+  getNotebookSortComparator,
+  hasEdgeEverDragData,
+  readNotebookSortPreference,
+  writeNotebookSortPreference,
+} from "@/lib/app-helpers";
 
 const NOTEBOOK_DRAG_SCROLL_EDGE_PX = 56;
 const NOTEBOOK_DRAG_SCROLL_MAX_STEP_PX = 18;
@@ -201,6 +207,7 @@ export const NotebookPane = ({
   const notebookScrollRef = useRef<HTMLDivElement | null>(null);
   const notebookDragScrollFrameRef = useRef<number | null>(null);
   const [expandSiblingsRequest, setExpandSiblingsRequest] = useState<{ parentId: string | null; token: number } | null>(null);
+  const [notebookSortMode, setNotebookSortMode] = useState<NotebookSortMode>(readNotebookSortPreference);
 
   const stopNotebookDragAutoScroll = useCallback(() => {
     if (notebookDragScrollFrameRef.current === null) {
@@ -263,8 +270,13 @@ export const NotebookPane = ({
   });
 
   const notebooks = notebooksQuery.data?.notebooks ?? [];
-  const tree = buildNotebookTree(notebooks);
+  const tree = useMemo(() => buildNotebookTree(notebooks, getNotebookSortComparator(notebookSortMode)), [notebooks, notebookSortMode]);
   const isLoading = notebooksQuery.isLoading;
+  const activeNotebookSortLabel = NOTEBOOK_SORT_OPTIONS.find((option) => option.value === notebookSortMode)?.label ?? "名称";
+
+  useEffect(() => {
+    writeNotebookSortPreference(notebookSortMode);
+  }, [notebookSortMode]);
 
   useEffect(() => {
     if (!selectedNotebookId) {
@@ -346,14 +358,29 @@ export const NotebookPane = ({
             >
               <BookPlus className="h-3.5 w-3.5" />
             </button>
-            <span
-              className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500"
-              title="拖拽笔记本排序"
-              role="img"
-              aria-label="拖拽笔记本排序"
-            >
-              <ArrowDownWideNarrow className="h-3.5 w-3.5" />
-            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition-colors duration-200 hover:bg-emerald-50 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/70"
+                  type="button"
+                  title={`笔记本排序：${activeNotebookSortLabel}`}
+                  aria-label={`笔记本排序：${activeNotebookSortLabel}`}
+                >
+                  <ArrowDownWideNarrow className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-36">
+                {NOTEBOOK_SORT_OPTIONS.map((option) => (
+                  <DropdownMenuCheckboxItem
+                    key={option.value}
+                    checked={notebookSortMode === option.value}
+                    onSelect={() => setNotebookSortMode(option.value)}
+                  >
+                    {option.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

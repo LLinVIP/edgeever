@@ -8,7 +8,11 @@ export type NotebookNode = Notebook & {
 
 export const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs));
 
-export const buildNotebookTree = (notebooks: Notebook[]): NotebookNode[] => {
+export type NotebookNodeComparator = (first: NotebookNode, second: NotebookNode) => number;
+
+const compareNotebookOrder: NotebookNodeComparator = (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
+
+export const buildNotebookTree = (notebooks: Notebook[], compareNodes: NotebookNodeComparator = compareNotebookOrder): NotebookNode[] => {
   const nodes = new Map<string, NotebookNode>();
 
   for (const notebook of notebooks) {
@@ -26,7 +30,7 @@ export const buildNotebookTree = (notebooks: Notebook[]): NotebookNode[] => {
   }
 
   const sortNodes = (items: NotebookNode[]) => {
-    items.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    items.sort(compareNodes);
     items.forEach((item) => sortNodes(item.children));
   };
 
