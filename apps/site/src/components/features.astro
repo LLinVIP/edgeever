@@ -3,13 +3,13 @@ import { Icon } from "astro-icon/components";
 
 const features = [
   {
-    title: "海量存储，几乎零成本托管",
+    title: "海量存储，永久免费托管。",
     summary:
-      "基于 Cloudflare D1 与 R2 的自托管架构，个人笔记库可以在免费额度内长期稳定运行。",
+      "因为 Cloudflare D1 与 R2 提供免费额度，个人笔记产生的数据量几乎永远用不完。",
     icon: "bx:bx-cloud",
     accent: "storage",
     points: [
-      "短笔记可达 10 万条量级，200KB 图片约可存放 5 万张。",
+      "免费额度对个人笔记足够宽裕：短笔记可达 10 万条量级，200KB 图片约可存放 5 万张。",
       "图片上传前在浏览器本地压缩，常见截图和照片通常减少 50%-90% 体积。",
       "数据和资源分别落在 D1 与 R2，部署后由你自己的 Cloudflare 账号承载。",
     ],
@@ -70,30 +70,20 @@ const features = [
   <div class="absolute bottom-24 -right-24 w-72 h-72 bg-slate-200/30 rounded-full blur-3xl -z-10"></div>
 
   <div class="max-w-3xl mb-14 text-center mx-auto">
-    <div class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-brand-text bg-brand-soft/80 backdrop-blur border border-brand-border/40 rounded-full mb-5 shadow-sm">
-      <Icon name="bx:bx-star" class="w-4 h-4 text-brand" />
-      核心特性
-    </div>
     <h2 class="text-4xl lg:text-5xl font-bold text-slate-900" id="features">
       重新定义个人笔记体验
     </h2>
-    <p class="text-lg mt-5 text-slate-600 leading-relaxed">
-      结合现代 Web 技术、Serverless 架构与 AI 代理能力，带来高效、开放、安全的内容工作区。
-    </p>
   </div>
 
   <div class="space-y-6">
     {
-      features.map((feature, index) => (
+      features.map((feature) => (
         <article class="group relative overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-brand-border hover:shadow-[0_22px_55px_-35px_rgb(var(--edgeever-brand-rgb)/0.55)]">
           <div class="grid h-[800px] grid-cols-1 sm:h-[760px] md:h-[700px] lg:h-[460px] lg:grid-cols-[minmax(0,1.02fr)_minmax(360px,0.98fr)]">
             <div class="flex h-full flex-col justify-center p-7 sm:p-9 lg:p-10">
               <div class="mb-7 flex items-center gap-4">
                 <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-brand-border/40 bg-brand-soft text-brand-text shadow-sm">
                   <Icon name={feature.icon} class="h-7 w-7" />
-                </div>
-                <div class="text-sm font-semibold text-brand-text">
-                  卖点 {String(index + 1).padStart(2, "0")}
                 </div>
               </div>
 
