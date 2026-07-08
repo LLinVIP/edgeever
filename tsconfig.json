@@ -23,5 +23,6 @@
     "apps/**/*.tsx",
     "packages/**/*.ts",
     "packages/**/*.tsx"
-  ]
+  ],
+  "exclude": ["apps/mobile"]
 }

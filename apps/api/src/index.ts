@@ -423,6 +423,7 @@ app.post("/api/v1/auth/login", zValidator("json", LoginSchema), async (c) => {
   return c.json({
     authRequired: true,
     authenticated: true,
+    sessionToken: session.token,
     user: {
       id: user.id,
       username: user.username,
@@ -432,7 +433,7 @@ app.post("/api/v1/auth/login", zValidator("json", LoginSchema), async (c) => {
 });
 
 app.post("/api/v1/auth/logout", async (c) => {
-  const token = getCookie(c, SESSION_COOKIE);
+  const token = getCookie(c, SESSION_COOKIE) ?? getBearerToken(c);
 
   if (token) {
     await revokeSession(c.env.DB, token);
@@ -2784,6 +2785,12 @@ const authenticateBearerToken = async (c: AppContext, touch: boolean): Promise<A
     return null;
   }
 
+  const sessionAuth = await authenticateSessionToken(c, token, touch);
+
+  if (sessionAuth) {
+    return sessionAuth;
+  }
+
   const row = await c.env.DB.prepare(
     `SELECT id, name, token_value, scopes_json, last_used_at, expires_at, is_revoked, created_at
      FROM api_tokens
@@ -2813,13 +2820,7 @@ const authenticateBearerToken = async (c: AppContext, touch: boolean): Promise<A
   };
 };
 
-const authenticateSession = async (c: AppContext, touch: boolean): Promise<AuthContext | null> => {
-  const token = getCookie(c, SESSION_COOKIE);
-
-  if (!token) {
-    return null;
-  }
-
+const authenticateSessionToken = async (c: AppContext, token: string, touch: boolean): Promise<AuthContext | null> => {
   const row = await c.env.DB.prepare(
     `SELECT s.id, s.user_id, u.username, u.display_name, s.expires_at
      FROM sessions s
@@ -2849,6 +2850,16 @@ const authenticateSession = async (c: AppContext, touch: boolean): Promise<AuthC
     scopes: [],
     sessionId: row.id,
   };
+};
+
+const authenticateSession = async (c: AppContext, touch: boolean): Promise<AuthContext | null> => {
+  const token = getCookie(c, SESSION_COOKIE);
+
+  if (!token) {
+    return null;
+  }
+
+  return authenticateSessionToken(c, token, touch);
 };
 
 const getBearerToken = (c: AppContext) => {

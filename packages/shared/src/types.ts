@@ -114,6 +114,7 @@ export type AuthSession = {
   authRequired: boolean;
   authenticated: boolean;
   user: AuthUser | null;
+  sessionToken?: string;
 };
 
 export type ApiError = {
