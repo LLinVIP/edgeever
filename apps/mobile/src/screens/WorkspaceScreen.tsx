@@ -1506,6 +1506,7 @@ const CreateMemoModal = ({
   const fallbackNotebookId = activeNotebookId !== ALL_NOTES_ID ? activeNotebookId : notebooks[0]?.id ?? "";
   const [notebookId, setNotebookId] = useState(fallbackNotebookId);
   const [title, setTitle] = useState("");
+  const [tagsText, setTagsText] = useState("");
   const [contentMarkdown, setContentMarkdown] = useState("");
   const [contentSelection, setContentSelection] = useState<TextSelection>({ start: 0, end: 0 });
 
@@ -1530,6 +1531,7 @@ const CreateMemoModal = ({
       const response = await client.createMemo({
         notebookId: targetNotebookId,
         title: title.trim() || DEFAULT_MEMO_TITLE,
+        tags: parseTags(tagsText),
         contentMarkdown: contentMarkdown.trim(),
       });
 
@@ -1541,6 +1543,7 @@ const CreateMemoModal = ({
         queryClient.invalidateQueries({ queryKey: ["mobile", "memos"] }),
       ]);
       setTitle("");
+      setTagsText("");
       setContentMarkdown("");
       onCreated(memo);
     },
@@ -1575,6 +1578,9 @@ const CreateMemoModal = ({
 
           <Text style={styles.label}>标题</Text>
           <TextInput onChangeText={setTitle} placeholder={DEFAULT_MEMO_TITLE} placeholderTextColor="#94a3b8" style={styles.titleInput} value={title} />
+
+          <Text style={styles.label}>标签</Text>
+          <TextInput onChangeText={setTagsText} placeholder="用逗号分隔标签" placeholderTextColor="#94a3b8" style={styles.titleInput} value={tagsText} />
 
           <Text style={styles.label}>正文</Text>
           <MarkdownToolbar
