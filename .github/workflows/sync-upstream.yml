@@ -6,15 +6,24 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - name: Verify sync token
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Missing repository secret UPSTREAM_SYNC_TOKEN. Create a fine-grained PAT with Contents and Workflows read/write access to this fork."
+            exit 1
+          fi
+
       - name: Merge upstream main into fork
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
         run: |
           gh api --method POST \
             "repos/${{ github.repository }}/merge-upstream" \
