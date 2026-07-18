@@ -6,25 +6,52 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify sync token
-        env:
-          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+      - name: Checkout fork
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Sync upstream code
+        shell: bash
         run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::error::Missing repository secret UPSTREAM_SYNC_TOKEN. Create a fine-grained PAT with Contents and Workflows read/write access to this fork."
-            exit 1
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/tianma-if/edgeever.git
+          git fetch --no-tags upstream main
+
+          upstream_sha="$(git rev-parse upstream/main)"
+          marker_file=".github/upstream-sync-sha"
+
+          if [ -f "$marker_file" ]; then
+            base_sha="$(cat "$marker_file")"
+            if ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+              base_sha="$(git merge-base HEAD upstream/main)"
+            fi
+          else
+            base_sha="$(git merge-base HEAD upstream/main)"
           fi
 
-      - name: Merge upstream main into fork
-        env:
-          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
-        run: |
-          gh api --method POST \
-            "repos/${{ github.repository }}/merge-upstream" \
-            -f branch=main
+          if [ "$base_sha" = "$upstream_sha" ]; then
+            echo "Fork is already up to date with upstream code."
+            exit 0
+          fi
+
+          git diff --binary "$base_sha" "$upstream_sha" -- .             ':(exclude).github/workflows/**' > /tmp/upstream.patch
+
+          if [ -s /tmp/upstream.patch ]; then
+            git apply --3way --index /tmp/upstream.patch
+          fi
+
+          printf '%s\n' "$upstream_sha" > "$marker_file"
+          git add "$marker_file"
+
+          git commit -m "chore: sync upstream code"
+          git push origin HEAD:main
