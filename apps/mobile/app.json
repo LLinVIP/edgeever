@@ -3,7 +3,7 @@
     "name": "EdgeEver",
     "slug": "edgeever",
     "scheme": "edgeever",
-    "version": "0.4.1",
+    "version": "0.4.5",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "org.edgeever.mobile",
-      "versionCode": 7,
+      "versionCode": 11,
       "adaptiveIcon": {
         "backgroundColor": "#f8fafc"
       }
@@ -27,6 +27,7 @@
         {
           "android": {
             "compileSdkVersion": 36,
+            "usesCleartextTraffic": true,
             "targetSdkVersion": 36,
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true
