@@ -34,6 +34,7 @@ export interface LocalTiptapEditorRef extends DOMImperativeFactory {
 }
 
 type LocalTiptapEditorProps = {
+  autoFocus?: boolean;
   baseUrl: string;
   content: EditorDoc;
   dom?: DOMProps;
@@ -70,6 +71,7 @@ export default function LocalTiptapEditor(props: LocalTiptapEditorProps) {
   );
 
   const editor = useEditor({
+    autofocus: props.autoFocus ? "end" : false,
     extensions: [
       StarterKit,
       protectedImageExtension,
@@ -155,6 +157,20 @@ export default function LocalTiptapEditor(props: LocalTiptapEditorProps) {
     }
 
     void onReadyRef.current(Math.round(performance.now() - startedAtRef.current));
+    let focusFrame = 0;
+    let focusRetry: number | null = null;
+    if (props.autoFocus) {
+      const focusAtEnd = () => {
+        if (!editor.isDestroyed) {
+          editor.commands.focus("end");
+        }
+      };
+      focusFrame = window.requestAnimationFrame(focusAtEnd);
+      // The DOM view can report ready one bridge turn before Android attaches
+      // its input connection. Keep the HTML selection ready for the native IME
+      // handoff without delaying the editor's first visible frame.
+      focusRetry = window.setTimeout(focusAtEnd, 120);
+    }
     const handlePageHide = () => flush();
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
@@ -165,13 +181,17 @@ export default function LocalTiptapEditor(props: LocalTiptapEditorProps) {
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      window.cancelAnimationFrame(focusFrame);
+      if (focusRetry !== null) {
+        window.clearTimeout(focusRetry);
+      }
       window.removeEventListener("pagehide", handlePageHide);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (changeTimerRef.current !== null) {
         window.clearTimeout(changeTimerRef.current);
       }
     };
-  }, [editor, flush]);
+  }, [editor, flush, props.autoFocus]);
 
   const toolbarState = useEditorState({
     editor,

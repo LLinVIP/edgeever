@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type QueryClient, type UseMutationResult } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import Constants from "expo-constants";
@@ -60,6 +60,7 @@ import {
   Image as RNImage,
   type ImageStyle,
   InteractionManager,
+  type LayoutChangeEvent,
   Linking,
   Modal,
   Platform,
@@ -78,7 +79,7 @@ import { Alert, Pressable, Text, TextInput } from "../components/LocalizedText";
 import Markdown, { type RenderRules } from "react-native-markdown-display";
 import { SvgXml } from "react-native-svg";
 import { buildRevisionDiffRows, createExcerpt, docToMarkdown, docToText, getNotebookDescendantIds, markdownToDoc, type ApiToken, type AuthUser, type MemoDetail, type MemoRevision, type MemoSummary, type Notebook, type ResourceListItem, type RevisionDiffRow, type TagSummary, type TiptapDoc } from "@edgeever/shared";
-import { MOBILE_UI_METRICS, toggleMobileMemoFilterMode } from "@edgeever/shared/mobile-ui";
+import { MOBILE_UI_METRICS, getMobileCenteredScrollOffset, getMobileNotebookSearchVisibleIds, toggleMobileMemoFilterMode, toggleMobileMemoSelection } from "@edgeever/shared/mobile-ui";
 import { clearMobileMemoDraft, clearMobileNewMemoDraft, readMobileMemoDraft, readMobileNewMemoDraft, writeMobileMemoDraft, writeMobileNewMemoDraft, type MobileMemoDraft } from "../lib/mobile-drafts";
 import {
   readMobileImageCompressionEnabled,
@@ -104,6 +105,7 @@ import {
 import {
   createMobileDataScope,
   getLocalMemo,
+  isMobileLocalMirrorInitialized,
   listLocalMemos,
   listLocalNotebooks,
   replaceLocalMemoId,
@@ -114,8 +116,10 @@ import {
 import { AccountSecurityPanel } from "./AccountSecurityModal";
 import { beginEditorStartup, markStartup, recordEditorStartup } from "../lib/startup-performance";
 import EditorRuntimePrewarm from "../components/EditorRuntimePrewarm";
+import { showEdgeEverKeyboard } from "../../modules/edgeever-keyboard";
 import LocalTiptapEditor, { type LocalTiptapEditorRef } from "../components/LocalTiptapEditor";
 import { resolveMobileThemeStyles, useMobileTheme, type MobileResolvedTheme } from "../lib/mobile-theme";
+import { MobileUpdateCard } from "../components/MobileUpdateCard";
 
 const ALL_NOTES_ID = "all";
 const DEFAULT_MEMO_TITLE = "无标题笔记";
@@ -125,6 +129,7 @@ const resolveEditableMemoTitle = (title?: string | null) => {
 };
 const MOBILE_APP_VERSION = Constants.expoConfig?.version ?? "0.1.2";
 const GITHUB_REPOSITORY_URL = "https://github.com/tianma-if/edgeever";
+const ANDROID_SYSTEM_NAVIGATION_FALLBACK = 48;
 
 const formatExecutionEnvironment = (environment: string | null | undefined, localePreference: MobileLocaleMode = "system") => {
   const english = isEnglishMobileLocale(localePreference);
@@ -267,12 +272,10 @@ export const WorkspaceScreen = () => {
         throw new Error("Client is not ready");
       }
 
-      let local = await listLocalNotebooks(dataScope);
-      if (local.notebooks.length === 0) {
+      if (!(await isMobileLocalMirrorInitialized(dataScope))) {
         await syncMobileLocalMirror(client, dataScope);
-        local = await listLocalNotebooks(dataScope);
       }
-      return local;
+      return listLocalNotebooks(dataScope);
     },
     enabled: Boolean(client),
   });
@@ -290,6 +293,10 @@ export const WorkspaceScreen = () => {
     queryFn: async ({ pageParam }) => {
       if (!client) {
         throw new Error("Client is not ready");
+      }
+
+      if (pageParam === 0 && !(await isMobileLocalMirrorInitialized(dataScope))) {
+        await syncMobileLocalMirror(client, dataScope);
       }
 
       return listLocalMemos(dataScope, {
@@ -436,17 +443,7 @@ export const WorkspaceScreen = () => {
 
   const toggleSelectedMemo = (memoId: string) => {
     setSelectionMode(true);
-    setSelectedMemoIds((current) => {
-      const next = new Set(current);
-
-      if (next.has(memoId)) {
-        next.delete(memoId);
-      } else {
-        next.add(memoId);
-      }
-
-      return next;
-    });
+    setSelectedMemoIds((current) => toggleMobileMemoSelection(current, memoId));
   };
 
   const clearSelection = () => {
@@ -519,10 +516,10 @@ export const WorkspaceScreen = () => {
   const closeRichEditor = () => {
     const memoId = richEditingSession?.memo.id ?? null;
     setRichEditingSession(null);
+    setSelectedMemoId(null);
     if (memoId) {
       memoDraftPrefetchRef.current.delete(memoId);
       void loadMemoDraft(memoId);
-      setSelectedMemoId(memoId);
     }
   };
 
@@ -1006,7 +1003,7 @@ export const WorkspaceScreen = () => {
       {activeView === "notes" ? (
         <NotesView
           activeNotebook={activeNotebook}
-          isLoading={searchActive ? searchQuery.isLoading : memosQuery.isLoading}
+          isLoading={notebooksQuery.isLoading || (searchActive ? searchQuery.isLoading : memosQuery.isLoading)}
           isLoadingMore={searchActive ? searchQuery.isFetchingNextPage : memosQuery.isFetchingNextPage}
           isRefreshing={isRefreshing}
           memoFilterMode={memoFilterMode}
@@ -1039,8 +1036,8 @@ export const WorkspaceScreen = () => {
             : memosQuery.data?.pages[0]?.totalCount ?? memos.length}
           selectionMode={selectionMode}
           selectedMemoIds={selectedMemoIds}
-          error={searchActive ? searchQuery.error : memosQuery.error}
-          isError={searchActive ? searchQuery.isError : memosQuery.isError}
+          error={notebooksQuery.error ?? (searchActive ? searchQuery.error : memosQuery.error)}
+          isError={notebooksQuery.isError || (searchActive ? searchQuery.isError : memosQuery.isError)}
         />
       ) : null}
 
@@ -1320,7 +1317,7 @@ const NotesView = ({
         ) : null}
         <View style={styles.mobileListTitleRow}>
           <Pressable
-            accessibilityLabel={memoView === "trash" ? "返回笔记列表" : "选择笔记本"}
+            accessibilityLabel={memoView === "trash" ? "返回笔记列表" : "切换笔记本"}
             accessibilityRole="button"
             onPress={memoView === "trash" ? () => onSetMemoView("notebook") : onOpenNotebookPicker}
             style={styles.mobileNotebookTitleButton}
@@ -1331,7 +1328,7 @@ const NotesView = ({
             </Text>
             {memoView === "notebook" ? <ChevronDown color="#64748b" size={16} /> : null}
           </Pressable>
-          <Pressable accessibilityLabel={selectionMode ? "批量操作" : "笔记列表操作"} accessibilityRole="button" onPress={onOpenActions} style={styles.mobileMoreButton}>
+          <Pressable accessibilityLabel={selectionMode ? "批量操作" : "列表选项"} accessibilityRole="button" onPress={onOpenActions} style={styles.mobileMoreButton}>
             <MoreHorizontal color="#475569" size={20} />
           </Pressable>
         </View>
@@ -1515,6 +1512,48 @@ const SheetOptionRow = ({ active, icon, label, onPress }: { active: boolean; ico
   </Pressable>
 );
 
+const useAutoCenterSelectedScrollRow = (visible: boolean, selectedKey: string) => {
+  const scrollRef = useRef<ScrollView>(null);
+  const viewportHeightRef = useRef(0);
+  const rowLayoutsRef = useRef(new Map<string, { height: number; y: number }>());
+  const hasCenteredRef = useRef(false);
+
+  const centerSelectedRow = useCallback(() => {
+    const selectedLayout = rowLayoutsRef.current.get(selectedKey);
+    const viewportHeight = viewportHeightRef.current;
+    if (!visible || hasCenteredRef.current || !selectedLayout || viewportHeight <= 0) {
+      return;
+    }
+
+    hasCenteredRef.current = true;
+    const y = getMobileCenteredScrollOffset(selectedLayout.y, selectedLayout.height, viewportHeight);
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ animated: false, y }));
+  }, [selectedKey, visible]);
+
+  useLayoutEffect(() => {
+    hasCenteredRef.current = false;
+    const frame = requestAnimationFrame(centerSelectedRow);
+    return () => cancelAnimationFrame(frame);
+  }, [centerSelectedRow]);
+
+  const onViewportLayout = useCallback((event: LayoutChangeEvent) => {
+    viewportHeightRef.current = event.nativeEvent.layout.height;
+    hasCenteredRef.current = false;
+    centerSelectedRow();
+  }, [centerSelectedRow]);
+
+  const onRowLayout = useCallback((rowKey: string, event: LayoutChangeEvent) => {
+    const { height, y } = event.nativeEvent.layout;
+    rowLayoutsRef.current.set(rowKey, { height, y });
+    if (rowKey === selectedKey) {
+      hasCenteredRef.current = false;
+      centerSelectedRow();
+    }
+  }, [centerSelectedRow, selectedKey]);
+
+  return { onRowLayout, onViewportLayout, scrollRef };
+};
+
 const NotebookPickerModal = ({
   activeNotebookId,
   notebooks,
@@ -1532,12 +1571,13 @@ const NotebookPickerModal = ({
   const safeAreaInsets = useSafeAreaInsets();
   const [searchText, setSearchText] = useState("");
   const [collapsedNotebookIds, setCollapsedNotebookIds] = useState<Set<string>>(() => new Set());
+  const selectedScroll = useAutoCenterSelectedScrollRow(visible, activeNotebookId);
   const notebookOptions = flattenNotebooks(notebooks);
   const searchQuery = searchText.trim();
   const childNotebookIds = getNotebookParentIdSet(notebooks);
   const activeNotebookAncestorIds = getNotebookAncestorIds(notebooks, activeNotebookId);
   const visibleNotebookOptions = searchQuery
-    ? filterNotebookOptions(notebookOptions, searchText)
+    ? filterNotebookOptionsById(notebookOptions, getMobileNotebookSearchVisibleIds(notebooks, searchText))
     : filterCollapsedNotebookOptions(notebookOptions, collapsedNotebookIds);
   const activeNotebookName = activeNotebookId === ALL_NOTES_ID
     ? "全部笔记"
@@ -1584,7 +1624,12 @@ const NotebookPickerModal = ({
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={styles.notebookPickerContent} style={styles.notebookPickerScroll}>
+          <ScrollView
+            contentContainerStyle={styles.notebookPickerContent}
+            onLayout={selectedScroll.onViewportLayout}
+            ref={selectedScroll.scrollRef}
+            style={styles.notebookPickerScroll}
+          >
           <View style={styles.notebookPickerSearchBox}>
             <Search color="#64748b" size={18} />
             <TextInput
@@ -1608,6 +1653,7 @@ const NotebookPickerModal = ({
             accessibilityLabel={activeNotebookId === ALL_NOTES_ID ? "当前：全部笔记" : "切换到全部笔记"}
             accessibilityRole="button"
             accessibilityState={{ selected: activeNotebookId === ALL_NOTES_ID }}
+            onLayout={(event) => selectedScroll.onRowLayout(ALL_NOTES_ID, event)}
             onPress={() => onSelect(ALL_NOTES_ID)}
             style={[styles.notebookPickerRow, styles.notebookPickerAllRow, activeNotebookId === ALL_NOTES_ID && styles.notebookPickerRowActive]}
           >
@@ -1635,6 +1681,7 @@ const NotebookPickerModal = ({
           {visibleNotebookOptions.map(({ depth, notebook }) => (
             <View
               key={notebook.id}
+              onLayout={(event) => selectedScroll.onRowLayout(notebook.id, event)}
               style={[styles.notebookPickerRow, activeNotebookId === notebook.id && styles.notebookPickerRowActive, depth > 0 && { marginLeft: Math.min(depth * 18, 54) }]}
             >
               {childNotebookIds.has(notebook.id) && !searchQuery ? (
@@ -1794,6 +1841,7 @@ const SettingsView = ({
                 </View>
               </View>
             </View>
+            <MobileUpdateCard />
             <SystemInfoCard embedded />
           </SettingsGroup>
         </View>
@@ -2204,6 +2252,7 @@ const CreateMemoModal = ({
 
   const editorElement = useMemo(() => draftLoaded && baseUrl ? (
     <LocalTiptapEditor
+      autoFocus
       baseUrl={baseUrl}
       content={contentJsonRef.current}
       dom={{
@@ -2227,6 +2276,9 @@ const CreateMemoModal = ({
       onReady={async (elapsedMs) => {
         setEditorReady(true);
         recordEditorStartup(elapsedMs);
+        if (Platform.OS === "android") {
+          setTimeout(showEdgeEverKeyboard, 180);
+        }
       }}
       ref={editorRef}
       locale={resolvedLocale}
@@ -3917,6 +3969,7 @@ const MemoDetailModal = ({
 }) => {
   const { session } = useSession();
   const { resolvedTheme } = useMobileTheme();
+  const safeAreaInsets = useSafeAreaInsets();
   const [actionsOpen, setActionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReplaceOpen, setSearchReplaceOpen] = useState(false);
@@ -3942,6 +3995,10 @@ const MemoDetailModal = ({
   const detailText = memo?.contentMarkdown || memo?.contentText || "没有正文内容";
   const searchMatches = useMemo(() => getTextSearchMatches(detailText, searchQuery), [detailText, searchQuery]);
   const searchMatchLabel = searchQuery.trim() ? `${searchMatches.length > 0 ? activeMatchIndex + 1 : 0}/${searchMatches.length}` : "0/0";
+  const editFabBottom = Math.max(
+    safeAreaInsets.bottom,
+    Platform.OS === "android" ? ANDROID_SYSTEM_NAVIGATION_FALLBACK : 0
+  ) + 16;
 
   useEffect(() => {
     setActiveMatchIndex(0);
@@ -4070,7 +4127,7 @@ const MemoDetailModal = ({
               beginEditorStartup();
               onRichEdit(memo);
             }}
-            style={styles.detailEditFab}
+            style={[styles.detailEditFab, { bottom: editFabBottom }]}
           >
             <Pencil color="#ffffff" size={20} />
           </Pressable>
@@ -4361,6 +4418,7 @@ const RichEditorModal = ({
   const editorElement = useMemo(
     () => memo && baseUrl ? (
       <LocalTiptapEditor
+        autoFocus
         baseUrl={baseUrl}
         content={contentJsonRef.current}
         dom={{
@@ -4383,7 +4441,10 @@ const RichEditorModal = ({
           initialFocusTimerRef.current = setTimeout(() => {
             initialFocusTimerRef.current = null;
             editorRef.current?.focusEnd();
-          }, 160);
+            if (Platform.OS === "android") {
+              showEdgeEverKeyboard();
+            }
+          }, 180);
         }}
         ref={editorRef}
         locale={resolvedLocale}
@@ -4545,8 +4606,12 @@ const MemoList = ({
 }) => {
   if (isLoading) {
     return (
-      <View style={styles.memoListStateWrap}>
-        <Text style={styles.memoListLoadingText}>正在拉取最新笔记</Text>
+      <View accessibilityLabel="正在加载笔记" accessibilityLiveRegion="polite" style={styles.memoListStateWrap}>
+        <View style={styles.memoListLoadingCard}>
+          <ActivityIndicator color="#059669" size="large" />
+          <Text style={styles.memoListLoadingTitle}>正在加载笔记</Text>
+          <Text style={styles.memoListLoadingDescription}>正在同步笔记本和笔记，首次登录可能需要一点时间。</Text>
+        </View>
       </View>
     );
   }
@@ -4630,6 +4695,7 @@ const MoveSelectionModal = ({
 }) => {
   const [searchText, setSearchText] = useState("");
   const notebookOptions = flattenNotebooks(notebooks);
+  const selectedScroll = useAutoCenterSelectedScrollRow(visible, selectedNotebookId);
 
   useEffect(() => {
     if (visible) {
@@ -4670,7 +4736,12 @@ const MoveSelectionModal = ({
               ) : null}
             </View>
           </View>
-          <ScrollView contentContainerStyle={styles.moveSelectionList} style={styles.listActionSheetScroll}>
+          <ScrollView
+            contentContainerStyle={styles.moveSelectionList}
+            onLayout={selectedScroll.onViewportLayout}
+            ref={selectedScroll.scrollRef}
+            style={styles.listActionSheetScroll}
+          >
             <NotebookTreeOptionRows
               collapsible={false}
               compact
@@ -4683,6 +4754,7 @@ const MoveSelectionModal = ({
               showDepthPrefix={false}
               showMemoCount={false}
               selectedNotebookId={selectedNotebookId}
+              onRowLayout={selectedScroll.onRowLayout}
             />
             {isMoving ? <ActivityIndicator color="#0f172a" style={styles.listLoadingFooter} /> : null}
           </ScrollView>
@@ -4818,6 +4890,7 @@ const NotebookTreeOptionRows = ({
   disabled = false,
   emptyIconSize,
   notebooks,
+  onRowLayout,
   onSelect,
   options,
   searchText,
@@ -4830,6 +4903,7 @@ const NotebookTreeOptionRows = ({
   disabled?: boolean;
   emptyIconSize: number;
   notebooks: Notebook[];
+  onRowLayout?: (notebookId: string, event: LayoutChangeEvent) => void;
   onSelect: (notebookId: string) => void;
   options: NotebookOption[];
   searchText: string;
@@ -4872,6 +4946,7 @@ const NotebookTreeOptionRows = ({
       {visibleNotebookOptions.map(({ depth, notebook }) => (
         <View
           key={notebook.id}
+          onLayout={onRowLayout ? (event) => onRowLayout(notebook.id, event) : undefined}
           style={[
             styles.moveNotebookRow,
             compact && styles.moveNotebookRowCompact,
@@ -5157,6 +5232,9 @@ const filterNotebookOptions = (options: NotebookOption[], searchText: string) =>
 
   return options.filter(({ notebook }) => notebook.name.toLowerCase().includes(query) || (notebook.slug || "").toLowerCase().includes(query));
 };
+
+const filterNotebookOptionsById = (options: NotebookOption[], visibleIds: ReadonlySet<string>) =>
+  options.filter(({ notebook }) => visibleIds.has(notebook.id));
 
 const getNotebookParentIdSet = (notebooks: Notebook[]) => {
   const notebookIds = new Set(notebooks.map((notebook) => notebook.id));
@@ -6437,10 +6515,29 @@ const baseWorkspaceStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 16,
   },
-  memoListLoadingText: {
+  memoListLoadingCard: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#a7f3d0",
+    borderRadius: 8,
+    borderStyle: "dashed",
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 34,
+  },
+  memoListLoadingTitle: {
+    color: "#0f172a",
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 14,
+  },
+  memoListLoadingDescription: {
     color: "#64748b",
-    fontSize: 14,
-    paddingHorizontal: 8,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 7,
+    maxWidth: 300,
+    textAlign: "center",
   },
   memoListErrorCard: {
     alignItems: "center",
@@ -7343,7 +7440,6 @@ const baseWorkspaceStyles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#10b981",
     borderRadius: 24,
-    bottom: 16,
     elevation: 6,
     height: 48,
     justifyContent: "center",
