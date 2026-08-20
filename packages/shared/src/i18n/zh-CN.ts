@@ -539,6 +539,7 @@ export const zhCN = {
     append: "追加到笔记",
     replace: "替换笔记",
     replaceSelection: "接受并替换选中内容",
+    applyFailed: "无法应用生成结果。请重新选择内容后再试。",
     configure: "请先在“我的 → AI 集成”中配置 AI 模型。",
   },
   accountInfo: {
@@ -581,7 +582,7 @@ export const zhCN = {
     unknown: "未知",
     copy: "复制信息",
     updateAvailableTitle: "发现新版本",
-    updateAvailableDescription: "已有新版本 {{version}}，可查看更新内容后升级。",
+    updateAvailableDescription: "<paragraph>新版本 v{{version}} 已发布。Cloudflare 和 Docker 实例<strong>默认每日自动更新，无需手动操作</strong>。</paragraph><paragraph><strong>请勿使用 Sync fork 更新 EdgeEver</strong>；若误点后提示冲突，无需理会。</paragraph><paragraph>如需立即更新：Cloudflare 用户可运行 Update deployed EdgeEver 工作流；Docker 用户可运行 ~/edgeever/update.sh。</paragraph><paragraph>桌面客户端需前往 Releases 页面下载更新。</paragraph>",
     viewRelease: "查看更新",
     latestVersion: "当前已是最新版本",
     closeUpdateNotice: "关闭新版本提示",
@@ -687,6 +688,14 @@ export const zhCN = {
       focusReplace: {
         label: "替换文本",
         description: "在当前笔记中打开替换。",
+      },
+      saveAndSync: {
+        label: "保存并同步",
+        description: "立即保存当前笔记，并同步等待中的本地更改。",
+      },
+      toggleEditorMode: {
+        label: "切换编辑模式",
+        description: "在 Markdown 源码与富文本编辑模式之间切换。",
       },
     },
   },
@@ -1405,7 +1414,7 @@ export const zhCN = {
     closeNotice: "关闭更新通知",
     sidebarInstall: "下载桌面客户端",
     sidebarInstallTitle: "下载 EdgeEver 桌面客户端",
-    sidebarInstallAvailability: "Mac 可用 · Windows 敬请期待",
+    sidebarInstallAvailability: "Mac/iOS/安卓可用 · Windows 敬请期待",
     sidebarClipper: "安装浏览器剪藏插件",
     sidebarClipperTitle: "安装 EdgeEver 浏览器剪藏插件",
     iosPrompt: {

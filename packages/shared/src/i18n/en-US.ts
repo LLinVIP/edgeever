@@ -539,6 +539,7 @@ export const enUS = {
     append: "Append to note",
     replace: "Replace note",
     replaceSelection: "Accept and replace selection",
+    applyFailed: "Could not apply the generated result. Select the content again and retry.",
     configure: "Configure an AI model in Me → AI Integrations first.",
   },
   accountInfo: {
@@ -581,7 +582,7 @@ export const enUS = {
     unknown: "Unknown",
     copy: "Copy info",
     updateAvailableTitle: "New version available",
-    updateAvailableDescription: "Version {{version}} is available. Review what’s new before updating.",
+    updateAvailableDescription: "<paragraph>Version v{{version}} is available. Cloudflare and Docker instances <strong>update automatically each day by default; no manual action is required</strong>.</paragraph><paragraph><strong>Do not use Sync fork to update EdgeEver</strong>; if you click it by mistake and it reports conflicts, you can safely ignore them.</paragraph><paragraph>To update immediately, Cloudflare users can run the Update deployed EdgeEver workflow, while Docker users can run ~/edgeever/update.sh.</paragraph><paragraph>The desktop app must be updated from the Releases page.</paragraph>",
     viewRelease: "View update",
     latestVersion: "You are running the latest version",
     closeUpdateNotice: "Close update notice",
@@ -687,6 +688,14 @@ export const enUS = {
       focusReplace: {
         label: "Replace text",
         description: "Open replace in the current note.",
+      },
+      saveAndSync: {
+        label: "Save and sync",
+        description: "Save the current note now and sync pending local changes.",
+      },
+      toggleEditorMode: {
+        label: "Switch editor mode",
+        description: "Switch between Markdown source and rich text editing.",
       },
     },
   },
@@ -1405,7 +1414,7 @@ export const enUS = {
     closeNotice: "Close update notice",
     sidebarInstall: "Download Desktop Client",
     sidebarInstallTitle: "Download the EdgeEver Desktop Client",
-    sidebarInstallAvailability: "Mac available · Windows coming soon",
+    sidebarInstallAvailability: "Mac/iOS/Android available · Windows soon",
     sidebarClipper: "Install Web Clipper",
     sidebarClipperTitle: "Install the EdgeEver Web Clipper",
     iosPrompt: {

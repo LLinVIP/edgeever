@@ -13,7 +13,40 @@ Cloudflare uses Workers with D1 and R2.
 - A reverse proxy with HTTPS when the instance is reachable outside a trusted
   local network.
 
-## Start with Compose
+## One-command install
+
+With Docker Compose v2 already installed:
+
+```sh
+curl -fsSL https://edgeever.org/install.sh | bash
+```
+
+Use Tencent Cloud TCR in mainland China:
+
+```sh
+curl -fsSL https://edgeever-installer-1256854452.cos.ap-guangzhou.myqcloud.com/install.sh | bash -s -- --mirror tcr
+```
+
+The installer creates `~/edgeever`, generates an administrator password, pulls
+`latest`, starts the container, and waits for it to become healthy. Run the same
+command again to upgrade without replacing the password or `/data` volume. The
+mainland command downloads the installer and Compose configuration from Tencent
+COS and pulls the image from Tencent TCR.
+
+By default, the installer schedules `~/edgeever/update.sh` with the current
+user's crontab at 04:17 server time every day. The updater refreshes the Compose
+configuration, pulls the configured image tag, restarts the service when needed,
+and verifies container health. Output is appended to `~/edgeever/update.log`.
+The default `latest` tag receives new releases automatically; a version supplied
+with `--version` remains pinned. Use `--no-auto-update` or
+`EDGE_EVER_AUTO_UPDATE=false` to disable the schedule. If `crontab` is unavailable,
+the installer keeps `update.sh` and prints instructions for adding it to the NAS
+task scheduler.
+
+Use `--version vX.Y.Z`, `--port PORT`, or `--install-dir DIR` when needed. Run
+`curl -fsSL https://edgeever.org/install.sh | bash -s -- --help` for all options.
+
+## Manual Compose
 
 Download `compose.yaml`, choose the release you want to run, and provide a
 strong instance password:
@@ -55,6 +88,11 @@ replacement is under `/data`:
 The image runs as the non-root `bun` user (UID/GID `1000`). If a NAS requires
 a host bind mount instead of the named volume, create the directory first and
 grant UID/GID `1000` read/write access.
+When an installation or automatic update fails, the script performs a real
+write test against `/data` and reports the mount type, source, container user,
+and directory state. If permissions are the cause, it prints a repair command
+tailored to a Docker named volume or NAS bind mount; it never changes existing
+data permissions automatically.
 
 ## Configuration
 
