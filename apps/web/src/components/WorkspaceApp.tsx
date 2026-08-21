@@ -797,6 +797,7 @@ export const WorkspaceApp = ({
   const [mobileSearchFocusToken, setMobileSearchFocusToken] = useState(0);
   const [noteSearchFocusToken, setNoteSearchFocusToken] = useState(0);
   const [noteReplaceFocusToken, setNoteReplaceFocusToken] = useState(0);
+  const [noteAiAssistantOpenToken, setNoteAiAssistantOpenToken] = useState(0);
   const [noteSaveAndSyncToken, setNoteSaveAndSyncToken] = useState(0);
   const [noteEditorModeToggleToken, setNoteEditorModeToggleToken] = useState(0);
   const [search, setSearch] = useState("");
@@ -1282,6 +1283,7 @@ export const WorkspaceApp = ({
 
   useWorkspaceSyncLifecycle({
     pendingSyncCount: syncSummary.total,
+    backgroundRefreshKey: localDataScope,
     refreshWorkspace: refreshWorkspaceFromServer,
     runQueuedSync,
     setOnline: setIsOnline,
@@ -2546,7 +2548,7 @@ export const WorkspaceApp = ({
           templatesOpen
       );
 
-      if (action === "saveAndSync" || action === "toggleEditorMode") {
+      if (action === "openAiAssistant" || action === "saveAndSync" || action === "toggleEditorMode") {
         // These replace browser-level commands, so consume them throughout the
         // workspace even when the current editor cannot perform the action.
         event.preventDefault();
@@ -2555,7 +2557,9 @@ export const WorkspaceApp = ({
           return;
         }
 
-        if (action === "saveAndSync") {
+        if (action === "openAiAssistant") {
+          setNoteAiAssistantOpenToken((value) => value + 1);
+        } else if (action === "saveAndSync") {
           setNoteSaveAndSyncToken((value) => value + 1);
         } else {
           setNoteEditorModeToggleToken((value) => value + 1);
@@ -3042,8 +3046,10 @@ export const WorkspaceApp = ({
                     contentSearchQuery={search}
                     searchFocusToken={noteSearchFocusToken}
                     replaceFocusToken={noteReplaceFocusToken}
+                    aiAssistantOpenToken={noteAiAssistantOpenToken}
                     saveAndSyncToken={noteSaveAndSyncToken}
                     editorModeToggleToken={noteEditorModeToggleToken}
+                    shortcutSettings={shortcutSettings}
                     onSyncRequested={syncMemosManually}
                     documentActionRequest={memoDocumentActionRequest}
                     onDocumentActionConsumed={(requestId) => {

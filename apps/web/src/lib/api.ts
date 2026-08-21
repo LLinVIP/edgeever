@@ -25,10 +25,8 @@ import type {
   AiPromptTemplate,
   AiPromptTemplateCreateInput,
   AiPromptTemplateUpdateInput,
-  AiAction,
-  AiTargetLanguage,
-  AiTone,
   AiStreamEvent,
+  AiGenerateInput,
   AiTagSuggestionPromptUpdateInput,
   AiTagSuggestionsRequestInput,
   AiTagSuggestionsResponse,
@@ -44,6 +42,18 @@ import { readAiStreamingPreference } from "./ai-generation-preference";
 
 type ListNotebooksResponse = {
   notebooks: Notebook[];
+};
+
+export type InstanceRelease = {
+  version: string;
+  changes: Record<string, string[]>;
+};
+
+export type InstanceHealth = {
+  ok: true;
+  name: string;
+  runtime: string;
+  authMode: string;
 };
 
 type ListMemosResponse = {
@@ -296,8 +306,8 @@ export type ApiResponseDiagnostics = {
 let desktopSessionRejected = false;
 let unauthorizedConfirmPromise: Promise<boolean> | null = null;
 
-const isDesktopAuthenticationRequest = (path: string) =>
-  path === "/api/v1/auth/login" || path === "/api/v1/auth/session";
+const isDesktopPublicRequest = (path: string) =>
+  path === "/api/release" || path === "/api/v1/auth/login" || path === "/api/v1/auth/session";
 
 /**
  * Confirm the browser is actually logged out before forcing the login screen.
@@ -365,7 +375,7 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const isDesktop = Boolean(typeof window !== "undefined" && window.edgeeverDesktop?.isAvailable);
   const sessionToken = isDesktop ? getDesktopSessionToken() : undefined;
 
-  if (isDesktop && desktopSessionRejected && !isDesktopAuthenticationRequest(path)) {
+  if (isDesktop && desktopSessionRejected && !isDesktopPublicRequest(path)) {
     throw new ApiRequestError("Authentication required", 401, "unauthorized");
   }
 
@@ -452,6 +462,10 @@ const requestArrayBuffer = async (path: string) => {
 };
 
 export const api = {
+  getInstanceHealth: () => request<InstanceHealth>("/api/health"),
+
+  getInstanceRelease: () => request<InstanceRelease>("/api/release"),
+
   getSession: () => request<AuthSession>("/api/v1/auth/session"),
 
   getPublicMemoShare: (token: string) =>
@@ -662,17 +676,7 @@ export const api = {
     }),
 
   streamAiGeneration: async (
-    payload: {
-      action: AiAction;
-      promptId?: string;
-      locale?: string;
-      title: string;
-      contentMarkdown: string;
-      stream?: boolean;
-      targetLanguage?: AiTargetLanguage;
-      tone?: AiTone;
-      instruction?: string;
-    },
+    payload: AiGenerateInput,
     options: { signal?: AbortSignal; onEvent: (event: AiStreamEvent) => void },
   ) => {
     const headers = new Headers({ "Content-Type": "application/json" });

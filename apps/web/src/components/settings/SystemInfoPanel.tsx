@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowUpCircle, CheckCircle2, Copy, ExternalLink } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { CircleCheck, Copy, ExternalLink } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { UpdateAvailableDescription } from "@/components/UpdateAvailableDescription";
+import { useDeployedUpdateNotice } from "@/hooks/useDeployedUpdateNotice";
 import { detectWebClientKind } from "@/lib/client-environment";
+import { api, getConfiguredDesktopApiBaseUrl } from "@/lib/api";
+import { resolveDeploymentPlatform } from "@/lib/instance-runtime";
 import { cn } from "@/lib/utils";
-import { fetchLatestRelease, isVersionOutdated, type LatestRelease } from "@/lib/version-check";
+import { getReleaseTagForVersion, resolveLocalizedReleaseChanges } from "@/lib/version-check";
 import { copyTextToClipboard } from "./settings-utils";
 
 export type SystemInfoItem = { label: string; value: string };
@@ -36,7 +39,11 @@ const getDeploymentDescription = (t: (key: string) => string) => {
   return `${trigger} · ${method}`;
 };
 
-export const getWebSystemInfoItems = (t: (key: string) => string, language: string): SystemInfoItem[] => {
+export const getWebSystemInfoItems = (
+  t: (key: string) => string,
+  language: string,
+  instanceRuntime?: string | null,
+): SystemInfoItem[] => {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || t("systemInfo.unknown");
   const userAgent = navigator.userAgent;
   const clientKind = detectWebClientKind({
@@ -57,6 +64,10 @@ export const getWebSystemInfoItems = (t: (key: string) => string, language: stri
     },
     { label: t("systemInfo.build"), value: __EDGEEVER_BUILD_LABEL__ },
     { label: t("systemInfo.client"), value: t(`systemInfo.clients.${clientKind}`) },
+    {
+      label: t("systemInfo.deploymentPlatform"),
+      value: t(`systemInfo.deploymentPlatforms.${resolveDeploymentPlatform(instanceRuntime)}`),
+    },
     { label: t("systemInfo.deployment"), value: getDeploymentDescription(t) },
     ...(clientKind === "desktopApp"
       ? []
@@ -70,27 +81,27 @@ export const getWebSystemInfoItems = (t: (key: string) => string, language: stri
 export const SystemInfoPanel = ({ active = true }: { active?: boolean }) => {
   const { t, i18n } = useTranslation();
   const [copied, setCopied] = useState(false);
-  const [latestRelease, setLatestRelease] = useState<LatestRelease | null>(null);
-  const [releaseCheck, setReleaseCheck] = useState<"idle" | "checking" | "latest" | "outdated" | "error">("idle");
-  const infoItems = useMemo(() => getWebSystemInfoItems(t, i18n.language), [i18n.language, t]);
-
-  useEffect(() => {
-    if (!active) {
-      setReleaseCheck("idle");
-      return;
-    }
-    const controller = new AbortController();
-    setReleaseCheck("checking");
-    void fetchLatestRelease(controller.signal)
-      .then((release) => {
-        setLatestRelease(release);
-        setReleaseCheck(isVersionOutdated(__EDGEEVER_APP_VERSION__, release.version) ? "outdated" : "latest");
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setReleaseCheck("error");
-      });
-    return () => controller.abort();
-  }, [active]);
+  const { release } = useDeployedUpdateNotice();
+  const instanceUrl = window.edgeeverDesktop?.isAvailable === true ? getConfiguredDesktopApiBaseUrl() : window.location.origin;
+  const healthQuery = useQuery({
+    queryKey: ["instance-health", instanceUrl],
+    queryFn: () => api.getInstanceHealth(),
+    enabled: active && Boolean(instanceUrl),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+  const infoItems = useMemo(
+    () => getWebSystemInfoItems(t, i18n.language, healthQuery.data?.runtime),
+    [healthQuery.data?.runtime, i18n.language, t],
+  );
+  const releaseTag = release ? getReleaseTagForVersion(release.version) : null;
+  const releaseHighlights = resolveLocalizedReleaseChanges(
+    release?.changes ?? {},
+    i18n.resolvedLanguage ?? i18n.language
+  );
+  const releaseUrl = releaseTag
+    ? `https://github.com/tianma-if/edgeever/releases/tag/${encodeURIComponent(releaseTag)}`
+    : "https://github.com/tianma-if/edgeever/releases/latest";
 
   const handleCopy = async () => {
     if (!(await copyTextToClipboard(infoItems.map((item) => `${item.label}: ${item.value}`).join("\n")))) return;
@@ -106,20 +117,40 @@ export const SystemInfoPanel = ({ active = true }: { active?: boolean }) => {
           {copied ? t("common.copied") : t("systemInfo.copy")}
         </Button>
       </div>
-      {releaseCheck === "outdated" && latestRelease ? (
+      {active && release ? (
         <div className="flex items-start gap-2 rounded-md border border-emerald-200 border-l-2 border-l-emerald-500 bg-emerald-50/40 px-3 py-2 text-slate-800" role="status">
-          <ArrowUpCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+          <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
           <div className="min-w-0 flex-1 text-xs leading-5">
-            <div className="font-semibold">{t("systemInfo.updateAvailableTitle")}</div>
-            <div className="text-slate-500"><UpdateAvailableDescription version={latestRelease.version} /></div>
+            <div className="font-semibold">{t("systemInfo.deployedUpdateTitle", { version: releaseTag?.replace(/^v/, "") ?? release.version })}</div>
+            {releaseHighlights.length > 0 ? (
+              <div className="mt-1 text-slate-600">
+                <div className="pl-4 font-medium">{t("systemInfo.releaseHighlightsLabel")}</div>
+                <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
+                  {releaseHighlights.map((highlight) => <li key={highlight}>{highlight}</li>)}
+                </ul>
+              </div>
+            ) : (
+              <div className="mt-1 text-slate-500">{t("systemInfo.releaseNotesUnavailable")}</div>
+            )}
+            <p className="mt-2 border-t border-emerald-100/70 pt-1.5 text-[10px] leading-4 text-slate-400">
+              <Trans
+                i18nKey="systemInfo.clientUpdatesNote"
+                components={{
+                  releases: (
+                    <a
+                      className="text-slate-500 underline underline-offset-2 hover:text-emerald-700"
+                      href="https://github.com/tianma-if/edgeever/releases"
+                      target="_blank"
+                      rel="noreferrer"
+                    />
+                  ),
+                }}
+              />
+            </p>
           </div>
-          <a className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-900" href={latestRelease.url} target="_blank" rel="noreferrer">
-            {t("systemInfo.viewRelease")} <ExternalLink className="h-3 w-3" />
+          <a className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-900" href={releaseUrl} target="_blank" rel="noreferrer">
+            {t("systemInfo.viewReleaseNotes")} <ExternalLink className="h-3 w-3" />
           </a>
-        </div>
-      ) : releaseCheck === "latest" ? (
-        <div className="flex items-center gap-2 text-xs text-emerald-700" role="status">
-          <CheckCircle2 className="h-4 w-4" /> {t("systemInfo.latestVersion")}
         </div>
       ) : null}
       <dl className="grid border-y border-slate-200 sm:grid-cols-3">
