@@ -18,6 +18,8 @@ import {
   getBase64DecodedByteLength,
   isAiTextAttachment,
 } from "./ai-assistant";
+import { AI_MODEL_OUTPUT_BUDGET_LIMITS, type AiModelOutputBudgetField } from "./ai-output-budgets";
+import { AI_MODEL_CAPABILITY_MAX_TOKENS, AI_MODEL_CAPABILITY_SOURCES } from "./ai-model-capabilities";
 
 export const NotebookCreateSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -382,10 +384,46 @@ export const AiProviderConnectionTestSchema = z.object({
   apiKey: z.string().min(1).max(4096).optional(),
 });
 
+const aiModelOutputBudget = (field: AiModelOutputBudgetField) => z.number()
+  .int()
+  .min(AI_MODEL_OUTPUT_BUDGET_LIMITS[field].min)
+  .max(AI_MODEL_OUTPUT_BUDGET_LIMITS[field].max)
+  .nullable()
+  .optional();
+
+const aiModelOutputBudgetShape = {
+  generationMaxOutputTokens: aiModelOutputBudget("generationMaxOutputTokens"),
+  tagSuggestionMaxOutputTokens: aiModelOutputBudget("tagSuggestionMaxOutputTokens"),
+  companionMaxOutputTokens: aiModelOutputBudget("companionMaxOutputTokens"),
+};
+
 export const AiModelConfigCreateSchema = z.object({
   modelId: z.string().trim().min(1).max(200),
   displayName: z.string().trim().min(1).max(200).optional(),
+  ...aiModelOutputBudgetShape,
 });
+
+const aiCapabilityTokens = z.number().int().positive().max(AI_MODEL_CAPABILITY_MAX_TOKENS).nullable();
+
+/** Limits a client read from the provider for one model; checked against the saved model and endpoint. */
+export const AiModelCapabilitiesReportSchema = z.object({
+  provider: AiProviderSchema,
+  modelId: z.string().trim().min(1).max(200),
+  baseUrl: z.string().trim().min(1).max(2048),
+  /** The provider configuration the limits were read for (its `updated_at`). */
+  configVersion: z.string().trim().min(1).max(64),
+  maxOutputTokens: aiCapabilityTokens,
+  maxInputTokens: aiCapabilityTokens,
+  contextWindowTokens: aiCapabilityTokens,
+  source: z.enum(AI_MODEL_CAPABILITY_SOURCES),
+}).strict();
+
+/** An omitted field keeps its current value; `null` restores the EdgeEver default. */
+export const AiModelConfigUpdateSchema = z.object(aiModelOutputBudgetShape)
+  .strict()
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    message: "At least one model setting is required.",
+  });
 
 export const AiDefaultModelUpdateSchema = z.object({
   modelConfigId: z.string().trim().min(1).nullable(),
@@ -421,6 +459,8 @@ export const AiGenerateSchema = z.object({
   tone: z.enum(AI_TONES).optional(),
   instruction: z.string().trim().min(1).max(2_000).optional(),
   attachments: z.array(AiAttachmentSchema).max(MAX_AI_ATTACHMENTS).default([]),
+  /** The client can send a request without an output limit when none is known (#652). */
+  allowUnboundedOutput: z.boolean().optional(),
 }).superRefine((input, context) => {
   if (!input.promptId && input.action === "translate" && !input.targetLanguage) {
     context.addIssue({ code: "custom", path: ["targetLanguage"], message: "A target language is required for translation." });
@@ -610,6 +650,8 @@ export type AiProviderConfigCreateInput = z.infer<typeof AiProviderConfigCreateS
 export type AiProviderConfigUpdateInput = z.infer<typeof AiProviderConfigUpdateSchema>;
 export type AiProviderConnectionTestInput = z.infer<typeof AiProviderConnectionTestSchema>;
 export type AiModelConfigCreateInput = z.infer<typeof AiModelConfigCreateSchema>;
+export type AiModelConfigUpdateInput = z.infer<typeof AiModelConfigUpdateSchema>;
+export type AiModelCapabilitiesReportInput = z.infer<typeof AiModelCapabilitiesReportSchema>;
 export type AiDefaultModelUpdateInput = z.infer<typeof AiDefaultModelUpdateSchema>;
 export type AiGenerateInput = z.input<typeof AiGenerateSchema>;
 export type AiAttachmentInput = z.infer<typeof AiAttachmentSchema>;

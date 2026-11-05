@@ -1,3 +1,4 @@
+import type { AiModelCapabilities } from "./ai-model-capabilities";
 import type { TiptapDoc } from "./content";
 import type { AiAction, AiPromptParameterKind, AiPromptResultMode } from "./ai-assistant";
 import type { DiagramKind, DiagramSummaryPreview } from "./diagram";
@@ -196,6 +197,12 @@ export type AiModelConfig = {
   providerConfigId: string;
   modelId: string;
   displayName: string;
+  /** Model-level output budgets; `null` uses the EdgeEver default. Older servers omit these fields. */
+  generationMaxOutputTokens?: number | null;
+  tagSuggestionMaxOutputTokens?: number | null;
+  companionMaxOutputTokens?: number | null;
+  /** Limits detected from the provider (#652); `null` when never detected, absent on older servers. */
+  detectedCapabilities?: AiModelCapabilities | null;
 };
 
 export type AiProviderConfig = {
@@ -267,7 +274,8 @@ export type AiDiscoveredModel = {
 export type AiStreamEvent =
   | { type: "start" }
   | { type: "text-delta"; text: string }
-  | { type: "finish"; finishReason?: string; inputTokens?: number; outputTokens?: number }
+  /** `truncated`: the provider stopped at its output or context limit, so the result is incomplete. */
+  | { type: "finish"; finishReason?: string; truncated?: boolean; inputTokens?: number; outputTokens?: number }
   | { type: "error"; code: string; message: string };
 
 export type AiTagSuggestion = {
